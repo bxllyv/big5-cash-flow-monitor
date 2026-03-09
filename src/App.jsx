@@ -74,6 +74,8 @@ export default function App(){
   const [wOpen,  setWOpen]  = useState(false);
   const [ohOpen, setOhOpen] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [editOhId, setEditOhId] = useState(null);
+  const [editOhId, setEditOhId] = useState(null);
 
   const blankM = () => {
     const last = months[months.length-1];
@@ -129,10 +131,27 @@ export default function App(){
     setWf({date:"",acc:blankAcc()}); setWOpen(false);
   }
 
+  function openEditOH(o){
+    setEditOhId(o.id);
+    setOf({...o});
+    setOhOpen(true);
+  }
+
+  function deleteOH(id){
+    if(window.confirm("Delete this overhead entry?")) setOhLog(ohLog.filter(o=>o.id!==id));
+  }
+
   function saveOH(){
     if(!of.month) return;
-    const entry={id:Date.now(),month:of.month,...Object.fromEntries(OH_KEYS.map(k=>[k,+of[k]||0]))};
-    setOhLog([...ohLog,entry]); setOhOpen(false);
+    if(editOhId){
+      const entry={id:editOhId,month:of.month,...Object.fromEntries(OH_KEYS.map(k=>[k,+of[k]||0]))};
+      setOhLog(ohLog.map(o=>o.id===editOhId?entry:o));
+    } else {
+      const entry={id:Date.now(),month:of.month,...Object.fromEntries(OH_KEYS.map(k=>[k,+of[k]||0]))};
+      setOhLog([...ohLog,entry]);
+    }
+    setOhOpen(false);
+    setEditOhId(null);
     setOf({month:"",...Object.fromEntries(OH_KEYS.map(k=>[k,""]))});
   }
 
@@ -355,6 +374,7 @@ export default function App(){
                       <th style={{...S.th,textAlign:"left"}}>Month</th>
                       {OH_KEYS.map((k,i)=><th key={k} style={{...S.th,color:["#3b82f6","#8b5cf6","#06b6d4","#f59e0b"][i]}}>{k}</th>)}
                       <th style={{...S.th,color:"#f59e0b"}}>Total</th>
+                      <th style={S.th}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -365,6 +385,10 @@ export default function App(){
                           <td style={{...S.td,textAlign:"left",color:"#93c5fd",fontWeight:700,fontFamily:"inherit"}}>{o.month}</td>
                           {OH_KEYS.map(k=><td key={k} style={S.td}>{peso(o[k]||0)}</td>)}
                           <td style={{...S.td,color:"#f59e0b",fontWeight:700}}>{peso(tot)}</td>
+                          <td style={{padding:"5px 8px",whiteSpace:"nowrap"}}>
+                            <button onClick={()=>openEditOH(o)} style={{...btnBase,background:"#1a2540",color:"#94a3b8",padding:"3px 9px",fontSize:9,marginRight:4}}>Edit</button>
+                            <button onClick={()=>deleteOH(o.id)} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Delete</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -565,7 +589,7 @@ export default function App(){
       {ohOpen&&(
         <div style={S.overlay} onClick={()=>setOhOpen(false)}>
           <div style={S.modal} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:3}}>Log Overhead</div>
+            <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:3}}>{editOhId?"Edit Overhead":"Log Overhead"}</div>
             <div style={{fontSize:10,color:"#334155",marginBottom:16}}>Monthly overhead breakdown</div>
             <Field label="Month"><Inp value={of.month} onChange={e=>setOf({...of,month:e.target.value})} placeholder="Mar 2026"/></Field>
             <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:9}}>
@@ -584,8 +608,8 @@ export default function App(){
                 Total: {peso(OH_KEYS.reduce((s,k)=>s+(Number(of[k])||0),0))}
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={saveOH} style={{...btnBase,background:"#15803d",color:"#fff"}}>Save</button>
-                <button onClick={()=>setOhOpen(false)} style={{...btnBase,background:"transparent",color:"#475569",border:"1px solid #1a2540"}}>Cancel</button>
+                <button onClick={saveOH} style={{...btnBase,background:"#15803d",color:"#fff"}}>{editOhId?"Save Changes":"Save"}</button>
+                <button onClick={()=>{setOhOpen(false);setEditOhId(null);}} style={{...btnBase,background:"transparent",color:"#475569",border:"1px solid #1a2540"}}>Cancel</button>
               </div>
             </div>
           </div>
