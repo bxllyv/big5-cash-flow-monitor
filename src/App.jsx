@@ -92,7 +92,7 @@ export default function App(){
     const invD = (Number(e.endInv)||0)-(Number(prevI)||0);
     const cf   = (Number(e.netProfit)||0) - (Number(e.swt)||0) - ohT - invD;
     run += cf;
-    return {...e,ohT,invD,gp,cf,cashEnd:Math.round(run)};
+    return {...e,ohT,invD,cf,cashEnd:Math.round(run)};
   });
   const latM = trail[trail.length-1];
 
