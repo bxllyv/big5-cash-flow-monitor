@@ -1,0 +1,21 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #07090f; }
+```
+
+---
+
+**`src/App.jsx`**
+→ Paste the entire dashboard `.jsx` file you downloaded earlier.
+
+---
+
+**Folder structure reminder:**
+```
+big5-cash-flow-monitor/
+├── index.html
+├── package.json
+├── vite.config.js
+└── src/
+    ├── App.jsx
+    ├── main.jsx
+    └── index.css
