@@ -90,7 +90,7 @@ export default function App(){
     const ohT = sumOh(e.oh);
     const prevI = i===0 ? PREV_INV : months[i-1].endInv;
     const invD = (Number(e.endInv)||0)-(Number(prevI)||0);
-    const cf   = (Number(e.netProfit)||0) - (Number(e.swt)||0) - ohT - invD;
+    const cf   = (Number(e.netProfit)||0) - (Number(e.swt)||0) - ohT - (Number(e.endInv)||0);
     run += cf;
     return {...e,ohT,invD,cf,cashEnd:Math.round(run)};
   });
