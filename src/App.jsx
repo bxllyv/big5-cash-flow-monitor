@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 
 const PREV_INV = 732000;
@@ -7,23 +7,24 @@ const ACCTS = ["GCash A","GCash B","BDO","BPI","Store Funds"];
 const ACCT_CLR = {"GCash A":"#3b82f6","GCash B":"#8b5cf6","BDO":"#06b6d4","BPI":"#f59e0b","Store Funds":"#22c55e"};
 const OH_KEYS = ["Rent","Salaries","Electricity","Other Expenses"];
 
-const INIT_MONTHS = [
+const SEED_MONTHS = [
   {id:1,month:"Jan 2026",sales:1657172,netProfit:1479000,foodCostPct:50,foodPkg:828586,swt:120000,begInv:732000,endInv:710000,oh:{Rent:65000,Salaries:363000,Electricity:40000,"Other Expenses":0}},
   {id:2,month:"Feb 2026",sales:1528677,netProfit:1364000,foodCostPct:51,foodPkg:779625,swt:115000,begInv:710000,endInv:700000,oh:{Rent:65000,Salaries:363000,Electricity:40000,"Other Expenses":0}},
 ];
-const INIT_WEEKLY = [
+const SEED_WEEKLY = [
   {id:1,date:"Feb 16, 2025",acc:{"GCash A":74853.34,"GCash B":500843.30,"BDO":668541,"BPI":1126000,"Store Funds":0}},
   {id:2,date:"Mar 4, 2025",acc:{"GCash A":27174.83,"GCash B":562703.39,"BDO":542485,"BPI":1049000,"Store Funds":0}},
 ];
-const INIT_OH = [
-  {id:1,month:"Jan 2026",Rent:65000,Salaries:363000,Electricity:40000,"Other Expenses":0},
-  {id:2,month:"Feb 2026",Rent:65000,Salaries:363000,Electricity:40000,"Other Expenses":0},
-];
+
+function load(key, fallback){
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch{ return fallback; }
+}
+function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch{} }
 
 const peso = (n,d=0) => n==null ? "—" : "₱"+Number(n).toLocaleString("en-PH",{minimumFractionDigits:d,maximumFractionDigits:d});
 const clr = (v,g,w) => v<=g ? "#22c55e" : v<=w ? "#f59e0b" : "#ef4444";
 const sumOh = oh => OH_KEYS.reduce((s,k)=>s+(Number(oh[k])||0),0);
-const blankOh = () => Object.fromEntries(OH_KEYS.map(k=>[k,""]));
 const blankAcc = () => Object.fromEntries(ACCTS.map(k=>[k,""]));
 
 const S = {
@@ -37,7 +38,6 @@ const S = {
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99,padding:16},
   modal: {background:"#0f1520",border:"1px solid #1a2540",borderRadius:14,padding:22,width:520,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto"},
 };
-
 const TT = {contentStyle:{background:"#0f1520",border:"1px solid #1a2540",borderRadius:8,fontSize:11},labelStyle:{color:"#64748b"}};
 
 function KPI({label,value,sub,color}){
@@ -49,9 +49,7 @@ function KPI({label,value,sub,color}){
     </div>
   );
 }
-
 function SLabel({t}){ return <div style={{fontSize:9,fontWeight:700,color:"#1e3a5f",textTransform:"uppercase",letterSpacing:".08em",marginBottom:11}}>{t}</div>; }
-
 function Field({label,full,children}){
   return(
     <div style={{gridColumn:full?"span 2":"span 1"}}>
@@ -60,31 +58,30 @@ function Field({label,full,children}){
     </div>
   );
 }
-
 function Inp({value,onChange,placeholder}){
   return <input style={S.input} value={value} onChange={onChange} placeholder={placeholder||""}/>;
 }
 
 export default function App(){
-  const [months, setMonths] = useState(INIT_MONTHS);
-  const [weekly, setWeekly] = useState(INIT_WEEKLY);
-  const [ohLog,  setOhLog]  = useState(INIT_OH);
+  const [months, setMonthsRaw] = useState(()=>load("big5_months", SEED_MONTHS));
+  const [weekly, setWeeklyRaw] = useState(()=>load("big5_weekly", SEED_WEEKLY));
   const [tab,    setTab]    = useState("weekly");
   const [mOpen,  setMOpen]  = useState(false);
   const [wOpen,  setWOpen]  = useState(false);
-  const [ohOpen, setOhOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [editOhId, setEditOhId] = useState(null);
+
+  function setMonths(v){ const val = typeof v==="function"?v(months):v; save("big5_months",val); setMonthsRaw(val); }
+  function setWeekly(v){ const val = typeof v==="function"?v(weekly):v; save("big5_weekly",val); setWeeklyRaw(val); }
 
   const blankM = () => {
     const last = months[months.length-1];
-    return {month:"",sales:"",netProfit:"",foodCostPct:"",foodPkg:"",swt:"",begInv:last?String(last.endInv):"",endInv:"",oh:{Rent:"65000",Salaries:"363000",Electricity:"40000","Other Expenses":"0"}};
+    return {month:"",sales:"",netProfit:"",foodCostPct:"",foodPkg:"",swt:"",
+            begInv:last?String(last.endInv):"",endInv:"",
+            oh:{Rent:"65000",Salaries:"363000",Electricity:"40000","Other Expenses":"0"}};
   };
   const [mf, setMf] = useState(blankM());
   const [wf, setWf] = useState({date:"",acc:blankAcc()});
-  const [of, setOf] = useState({month:"",...Object.fromEntries(OH_KEYS.map(k=>[k,""]))});
 
-  // Compute monthly cash trail
   let run = INIT_CASH;
   const trail = months.map((e,i)=>{
     const ohT = sumOh(e.oh);
@@ -96,7 +93,6 @@ export default function App(){
   });
   const latM = trail[trail.length-1];
 
-  // Compute weekly totals
   const wRows = weekly.map(w=>({...w,total:ACCTS.reduce((s,k)=>s+(Number(w.acc[k])||0),0)}));
   const latW  = wRows[wRows.length-1];
   const prevW = wRows[wRows.length-2];
@@ -114,14 +110,13 @@ export default function App(){
     };
     if(editId){
       setMonths(months.map(m=>m.id===editId?{...entry,id:editId}:m));
-      setOhLog(ohLog.map(o=>o.id===editId?{id:editId,month:entry.month,...entry.oh}:o));
     } else {
-      const id=Date.now();
-      setMonths([...months,{...entry,id}]);
-      setOhLog([...ohLog,{id,month:entry.month,...entry.oh}]);
+      setMonths([...months,{...entry,id:Date.now()}]);
     }
     setMOpen(false);
   }
+
+  function deleteM(id){ setMonths(months.filter(m=>m.id!==id)); }
 
   function saveW(){
     if(!wf.date) return;
@@ -129,39 +124,14 @@ export default function App(){
     setWf({date:"",acc:blankAcc()}); setWOpen(false);
   }
 
-  function openEditOH(o){
-    setEditOhId(o.id);
-    setOf({...o});
-    setOhOpen(true);
-  }
+  function deleteW(id){ setWeekly(weekly.filter(w=>w.id!==id)); }
 
-  function deleteOH(id){
-    if(window.confirm("Delete this overhead entry?")) setOhLog(ohLog.filter(o=>o.id!==id));
-  }
-
-  function saveOH(){
-    if(!of.month) return;
-    if(editOhId){
-      const entry={id:editOhId,month:of.month,...Object.fromEntries(OH_KEYS.map(k=>[k,+of[k]||0]))};
-      setOhLog(ohLog.map(o=>o.id===editOhId?entry:o));
-    } else {
-      const entry={id:Date.now(),month:of.month,...Object.fromEntries(OH_KEYS.map(k=>[k,+of[k]||0]))};
-      setOhLog([...ohLog,entry]);
-    }
-    setOhOpen(false);
-    setEditOhId(null);
-    setOf({month:"",...Object.fromEntries(OH_KEYS.map(k=>[k,""]))});
-  }
-
-  const TABS=[["weekly","💰 Weekly Cash"],["monthly","📋 Monthly P&L"],["overhead","🏷 Overhead"],["trends","📈 Trends"],["leaks","🔍 Leaks"]];
+  const TABS=[["weekly","💰 Weekly Cash"],["monthly","📋 Monthly P&L"],["trends","📈 Trends"],["leaks","🔍 Leaks"]];
   const cashClr = v => v>=3000000?"#22c55e":v>=2000000?"#f59e0b":"#ef4444";
-
   const btnBase = {border:"none",borderRadius:7,padding:"7px 13px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:".05em",textTransform:"uppercase"};
 
   return(
     <div style={S.page}>
-
-      {/* ── HEADER ── */}
       <div style={{borderBottom:"1px solid #1a2540",padding:"11px 18px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <div style={{width:28,height:28,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:"#fff"}}>₱</div>
@@ -178,43 +148,26 @@ export default function App(){
           ))}
         </div>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setWOpen(true)}  style={{...btnBase,background:"#1d4ed8",color:"#fff"}}>+ Weekly</button>
-          <button onClick={openAddM}             style={{...btnBase,background:"#6d28d9",color:"#fff"}}>+ Month</button>
-          <button onClick={()=>setOhOpen(true)}  style={{...btnBase,background:"#15803d",color:"#fff"}}>+ Overhead</button>
+          <button onClick={()=>setWOpen(true)} style={{...btnBase,background:"#1d4ed8",color:"#fff"}}>+ Weekly</button>
+          <button onClick={openAddM}           style={{...btnBase,background:"#6d28d9",color:"#fff"}}>+ Month</button>
         </div>
       </div>
 
       <div style={{padding:"16px 18px",maxWidth:1260}}>
 
-        {/* ══ WEEKLY CASH ══════════════════════════════════════════ */}
         {tab==="weekly" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
-
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-              <KPI label="Latest Total Cash"
-                value={latW?peso(latW.total,2):"—"} sub={latW?.date}
-                color={latW?cashClr(latW.total):"#6b7280"}/>
-              <KPI label="Week-on-Week Δ"
-                value={wDelta!=null?(wDelta>=0?"+":"")+peso(wDelta,2):"—"}
-                sub={wDelta!=null?(wDelta>=0?"↑ Up this week":"↓ Down this week"):""}
-                color={wDelta==null?"#6b7280":wDelta>=0?"#22c55e":"#ef4444"}/>
-              <KPI label="Largest Account"
-                value={latW?Object.entries(latW.acc).sort((a,b)=>b[1]-a[1])[0][0]:"—"}
-                sub={latW?peso(Math.max(...Object.values(latW.acc)),2):""} color="#60a5fa"/>
-              <KPI label="Entries Logged" value={weekly.length}
-                sub={weekly.length?weekly[0].date+" → "+weekly[weekly.length-1].date:""} color="#a78bfa"/>
+              <KPI label="Latest Total Cash" value={latW?peso(latW.total,2):"—"} sub={latW?.date} color={latW?cashClr(latW.total):"#6b7280"}/>
+              <KPI label="Week-on-Week Δ" value={wDelta!=null?(wDelta>=0?"+":"")+peso(wDelta,2):"—"} sub={wDelta!=null?(wDelta>=0?"↑ Up":"↓ Down"):""} color={wDelta==null?"#6b7280":wDelta>=0?"#22c55e":"#ef4444"}/>
+              <KPI label="Largest Account" value={latW?Object.entries(latW.acc).sort((a,b)=>b[1]-a[1])[0][0]:"—"} sub={latW?peso(Math.max(...Object.values(latW.acc)),2):""} color="#60a5fa"/>
+              <KPI label="Entries Logged" value={weekly.length} sub={weekly.length?weekly[0].date+" → "+weekly[weekly.length-1].date:""} color="#a78bfa"/>
             </div>
-
             <div style={S.card}>
               <SLabel t="Total Cash on Hand — Weekly Trend"/>
               <ResponsiveContainer width="100%" height={185}>
                 <AreaChart data={wRows.map(w=>({d:w.date,v:w.total}))}>
-                  <defs>
-                    <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={.2}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
+                  <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={.2}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1a2540"/>
                   <XAxis dataKey="d" tick={{fontSize:10,fill:"#334155"}}/>
                   <YAxis tick={{fontSize:10,fill:"#334155"}} tickFormatter={v=>"₱"+(v/1e6).toFixed(2)+"M"}/>
@@ -225,7 +178,6 @@ export default function App(){
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-
             <div style={S.card}>
               <SLabel t="Account Breakdown by Week"/>
               <ResponsiveContainer width="100%" height={185}>
@@ -239,19 +191,17 @@ export default function App(){
                 </BarChart>
               </ResponsiveContainer>
             </div>
-
             <div style={S.card}>
               <SLabel t="Weekly Cash Log"/>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr>
-                      <th style={{...S.th,textAlign:"left"}}>Date</th>
-                      {ACCTS.map(a=><th key={a} style={{...S.th,color:ACCT_CLR[a]}}>{a}</th>)}
-                      <th style={{...S.th,color:"#f1f5f9"}}>Total</th>
-                      <th style={S.th}>Δ vs Prior</th>
-                    </tr>
-                  </thead>
+                  <thead><tr>
+                    <th style={{...S.th,textAlign:"left"}}>Date</th>
+                    {ACCTS.map(a=><th key={a} style={{...S.th,color:ACCT_CLR[a]}}>{a}</th>)}
+                    <th style={{...S.th,color:"#f1f5f9"}}>Total</th>
+                    <th style={S.th}>Δ vs Prior</th>
+                    <th style={S.th}></th>
+                  </tr></thead>
                   <tbody>
                     {wRows.map((w,i)=>{
                       const d=i===0?null:w.total-wRows[i-1].total;
@@ -261,6 +211,9 @@ export default function App(){
                           {ACCTS.map(a=><td key={a} style={{...S.td,color:w.acc[a]>0?"#94a3b8":"#1a2540"}}>{w.acc[a]>0?peso(w.acc[a],2):"—"}</td>)}
                           <td style={{...S.td,color:"#f1f5f9",fontWeight:700}}>{peso(w.total,2)}</td>
                           <td style={{...S.td,color:d==null?"#1a2540":d>=0?"#22c55e":"#ef4444",fontWeight:700}}>{d==null?"—":(d>=0?"+":"")+peso(d,2)}</td>
+                          <td style={{padding:"5px 8px"}}>
+                            <button onClick={()=>{if(window.confirm("Delete this entry?")) deleteW(w.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Delete</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -271,31 +224,24 @@ export default function App(){
           </div>
         )}
 
-        {/* ══ MONTHLY P&L ══════════════════════════════════════════ */}
         {tab==="monthly" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
-
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
               <KPI label="Latest Month" value={latM?.month||"—"} color="#93c5fd"/>
               <KPI label="Sales" value={latM?peso(latM.sales):"—"} color="#f1f5f9"/>
-              <KPI label="Net Profit (disc-net)" value={latM?peso(latM.netProfit):"—"}
-                sub={latM?((latM.netProfit/latM.sales)*100).toFixed(1)+"% of sales":""} color="#a78bfa"/>
-              <KPI label="Food Cost %" value={latM?latM.foodCostPct+"%":"—"} sub="Target ≤ 48%"
-                color={latM?clr(latM.foodCostPct,48,52):"#6b7280"}/>
+              <KPI label="Net Profit (disc-net)" value={latM?peso(latM.netProfit):"—"} sub={latM?((latM.netProfit/latM.sales)*100).toFixed(1)+"% of sales":""} color="#a78bfa"/>
+              <KPI label="Food Cost %" value={latM?latM.foodCostPct+"%":"—"} sub="Target ≤ 48%" color={latM?clr(latM.foodCostPct,48,52):"#6b7280"}/>
             </div>
-
             <div style={S.card}>
               <SLabel t="Monthly P&L Log"/>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr>
-                      <th style={{...S.th,textAlign:"left"}}>Month</th>
-                      {["Sales","Net Profit","Food & Pkg","SWT","Food Cost %","Beg Inv","End Inv","Overhead","Cash Flow",""].map((h,i)=>(
-                        <th key={i} style={S.th}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
+                  <thead><tr>
+                    <th style={{...S.th,textAlign:"left"}}>Month</th>
+                    {["Sales","Net Profit","Food & Pkg","SWT","Food Cost %","Beg Inv","End Inv","Overhead","Cash Flow",""].map((h,i)=>(
+                      <th key={i} style={S.th}>{h}</th>
+                    ))}
+                  </tr></thead>
                   <tbody>
                     {trail.map(e=>{
                       const swtP = e.sales?(e.swt/e.sales*100):0;
@@ -311,8 +257,9 @@ export default function App(){
                           <td style={{...S.td,color:e.endInv>500000?"#f59e0b":"#94a3b8"}}>{peso(e.endInv)}</td>
                           <td style={{...S.td,color:"#f59e0b"}}>{peso(e.ohT)}</td>
                           <td style={{...S.td,color:e.cf>0?"#22c55e":"#ef4444",fontWeight:700}}>{peso(e.cf)}</td>
-                          <td style={{padding:"5px 8px"}}>
-                            <button onClick={()=>openEditM(e)} style={{...btnBase,background:"#1a2540",color:"#94a3b8",padding:"3px 9px",fontSize:9}}>Edit</button>
+                          <td style={{padding:"5px 8px",whiteSpace:"nowrap"}}>
+                            <button onClick={()=>openEditM(e)} style={{...btnBase,background:"#1a2540",color:"#94a3b8",padding:"3px 9px",fontSize:9,marginRight:4}}>Edit</button>
+                            <button onClick={()=>{if(window.confirm("Delete this month?")) deleteM(e.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Del</button>
                           </td>
                         </tr>
                       );
@@ -321,7 +268,6 @@ export default function App(){
                 </table>
               </div>
             </div>
-
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
               <div style={S.card}>
                 <SLabel t="Sales vs Net Profit"/>
@@ -351,53 +297,10 @@ export default function App(){
                 </ResponsiveContainer>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ══ OVERHEAD ══════════════════════════════════════════════ */}
-        {tab==="overhead" && (
-          <div style={{display:"flex",flexDirection:"column",gap:13}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-              {OH_KEYS.map((k,i)=>{
-                const lat=ohLog[ohLog.length-1];
-                return <KPI key={k} label={k} value={lat?peso(lat[k]):"—"} color={["#3b82f6","#8b5cf6","#06b6d4","#f59e0b"][i]}/>;
-              })}
-            </div>
             <div style={S.card}>
-              <SLabel t="Overhead Log"/>
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr>
-                      <th style={{...S.th,textAlign:"left"}}>Month</th>
-                      {OH_KEYS.map((k,i)=><th key={k} style={{...S.th,color:["#3b82f6","#8b5cf6","#06b6d4","#f59e0b"][i]}}>{k}</th>)}
-                      <th style={{...S.th,color:"#f59e0b"}}>Total</th>
-                      <th style={S.th}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ohLog.map(o=>{
-                      const tot=OH_KEYS.reduce((s,k)=>s+(Number(o[k])||0),0);
-                      return(
-                        <tr key={o.id} style={{borderBottom:"1px solid #07090f"}}>
-                          <td style={{...S.td,textAlign:"left",color:"#93c5fd",fontWeight:700,fontFamily:"inherit"}}>{o.month}</td>
-                          {OH_KEYS.map(k=><td key={k} style={S.td}>{peso(o[k]||0)}</td>)}
-                          <td style={{...S.td,color:"#f59e0b",fontWeight:700}}>{peso(tot)}</td>
-                          <td style={{padding:"5px 8px",whiteSpace:"nowrap"}}>
-                            <button onClick={()=>openEditOH(o)} style={{...btnBase,background:"#1a2540",color:"#94a3b8",padding:"3px 9px",fontSize:9,marginRight:4}}>Edit</button>
-                            <button onClick={()=>deleteOH(o.id)} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Delete</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div style={S.card}>
-              <SLabel t="Overhead Composition"/>
+              <SLabel t="Overhead Breakdown by Month"/>
               <ResponsiveContainer width="100%" height={185}>
-                <BarChart data={ohLog.map(o=>({m:o.month,...Object.fromEntries(OH_KEYS.map(k=>[k,o[k]||0]))}))}>
+                <BarChart data={trail.map(e=>({m:e.month,...e.oh}))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1a2540"/>
                   <XAxis dataKey="m" tick={{fontSize:10,fill:"#334155"}}/>
                   <YAxis tick={{fontSize:10,fill:"#334155"}} tickFormatter={v=>"₱"+(v/1000).toFixed(0)+"K"}/>
@@ -410,7 +313,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ══ TRENDS ════════════════════════════════════════════════ */}
         {tab==="trends" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
@@ -461,7 +363,6 @@ export default function App(){
           </div>
         )}
 
-        {/* ══ LEAKS ═════════════════════════════════════════════════ */}
         {tab==="leaks" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
             {trail.map((e,i)=>{
@@ -474,9 +375,7 @@ export default function App(){
                 <div key={e.id} style={S.card}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                     <div style={{fontWeight:700,fontSize:13,color:"#93c5fd"}}>{e.month}</div>
-                    <div style={{fontSize:11,fontWeight:700,color:tot>200000?"#ef4444":tot>80000?"#f59e0b":"#22c55e"}}>
-                      Estimated Leak: {peso(tot)}
-                    </div>
+                    <div style={{fontSize:11,fontWeight:700,color:tot>200000?"#ef4444":tot>80000?"#f59e0b":"#22c55e"}}>Estimated Leak: {peso(tot)}</div>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:10}}>
                     {[{l:"Inventory Buildup",v:iLeak,c:"#f59e0b"},{l:"Excess SWT",v:sLeak,c:"#ef4444"},{l:"Food Cost Overage",v:fLeak,c:"#f472b6"}].map((x,j)=>(
@@ -499,9 +398,7 @@ export default function App(){
             <div style={S.card}>
               <SLabel t="Benchmark Reference"/>
               <table style={{width:"100%",borderCollapse:"collapse"}}>
-                <thead><tr>
-                  {["Metric","Target","Caution","Red Flag"].map(h=><th key={h} style={{...S.th,textAlign:"left"}}>{h}</th>)}
-                </tr></thead>
+                <thead><tr>{["Metric","Target","Caution","Red Flag"].map(h=><th key={h} style={{...S.th,textAlign:"left"}}>{h}</th>)}</tr></thead>
                 <tbody>
                   {[["Food Cost %","≤ 48%","48–52%","> 52%"],["SWT / Spoilage","≤ 3% of sales","3–5%","> 5%"],["End Inventory","≤ ₱500K","₱500K–₱650K","> ₱650K"],["Cash on Hand","≥ ₱3.5M","₱2M–₱3.5M","< ₱2M"],["Total Overhead","≤ ₱468K/mo","₱468–550K","> ₱550K"]].map((r,i)=>(
                     <tr key={i} style={{borderBottom:"1px solid #07090f"}}>
@@ -535,13 +432,16 @@ export default function App(){
               <Field label="Food Cost %"><Inp value={mf.foodCostPct} onChange={e=>setMf({...mf,foodCostPct:e.target.value})} placeholder="50"/></Field>
             </div>
             <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid #1a2540"}}>
-              <div style={{fontSize:9,fontWeight:700,color:"#1a2540",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Overhead</div>
+              <div style={{fontSize:9,fontWeight:700,color:"#1e3a5f",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Overhead</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {OH_KEYS.map(k=>(
                   <Field key={k} label={k}>
                     <Inp value={mf.oh[k]} onChange={e=>setMf({...mf,oh:{...mf.oh,[k]:e.target.value}})} placeholder="0"/>
                   </Field>
                 ))}
+              </div>
+              <div style={{marginTop:8,fontSize:11,color:"#f59e0b",fontFamily:"'Courier New',monospace",textAlign:"right"}}>
+                Total Overhead: {peso(OH_KEYS.reduce((s,k)=>s+(Number(mf.oh[k])||0),0))}
               </div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:16}}>
@@ -577,37 +477,6 @@ export default function App(){
               <div style={{display:"flex",gap:8}}>
                 <button onClick={saveW} style={{...btnBase,background:"#1d4ed8",color:"#fff"}}>Save Entry</button>
                 <button onClick={()=>setWOpen(false)} style={{...btnBase,background:"transparent",color:"#475569",border:"1px solid #1a2540"}}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ MODAL: Overhead ══ */}
-      {ohOpen&&(
-        <div style={S.overlay} onClick={()=>setOhOpen(false)}>
-          <div style={S.modal} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:3}}>{editOhId?"Edit Overhead":"Log Overhead"}</div>
-            <div style={{fontSize:10,color:"#334155",marginBottom:16}}>Monthly overhead breakdown</div>
-            <Field label="Month"><Inp value={of.month} onChange={e=>setOf({...of,month:e.target.value})} placeholder="Mar 2026"/></Field>
-            <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:9}}>
-              {OH_KEYS.map((k,i)=>(
-                <div key={k} style={{display:"grid",gridTemplateColumns:"160px 1fr",alignItems:"center",gap:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:["#3b82f6","#8b5cf6","#06b6d4","#f59e0b"][i]}}/>
-                    <span style={{fontSize:12,fontWeight:600,color:"#94a3b8"}}>{k}</span>
-                  </div>
-                  <Inp value={of[k]} onChange={e=>setOf({...of,[k]:e.target.value})} placeholder="0"/>
-                </div>
-              ))}
-            </div>
-            <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid #1a2540",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#f59e0b",fontFamily:"'Courier New',monospace"}}>
-                Total: {peso(OH_KEYS.reduce((s,k)=>s+(Number(of[k])||0),0))}
-              </div>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={saveOH} style={{...btnBase,background:"#15803d",color:"#fff"}}>{editOhId?"Save Changes":"Save"}</button>
-                <button onClick={()=>{setOhOpen(false);setEditOhId(null);}} style={{...btnBase,background:"transparent",color:"#475569",border:"1px solid #1a2540"}}>Cancel</button>
               </div>
             </div>
           </div>
