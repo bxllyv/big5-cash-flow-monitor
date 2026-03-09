@@ -75,7 +75,6 @@ export default function App(){
   const [ohOpen, setOhOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [editOhId, setEditOhId] = useState(null);
-  const [editOhId, setEditOhId] = useState(null);
 
   const blankM = () => {
     const last = months[months.length-1];
