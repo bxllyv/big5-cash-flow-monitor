@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend } from "recharts";
 
 const PREV_INV = 732000;
@@ -6,6 +6,7 @@ const INIT_CASH = 2000000;
 const ACCTS = ["GCash A","GCash B","BDO","BPI","Store Funds"];
 const ACCT_CLR = {"GCash A":"#3b82f6","GCash B":"#8b5cf6","BDO":"#06b6d4","BPI":"#f59e0b","Store Funds":"#22c55e"};
 const OH_KEYS = ["Rent","Salaries","Electricity","Other Expenses"];
+const PAY_KEYS = ["GCash","GC","BDO","BPI","Maya","MayaCard","MayaQR","Cheque","VoidDisc"];
 
 const SEED_MONTHS = [
   {id:1,month:"Jan 2026",sales:1657172,netProfit:1479000,foodCostPct:50,foodPkg:828586,swt:120000,begInv:732000,endInv:710000,oh:{Rent:65000,Salaries:363000,Electricity:40000,"Other Expenses":0}},
@@ -15,17 +16,24 @@ const SEED_WEEKLY = [
   {id:1,date:"Feb 16, 2025",acc:{"GCash A":74853.34,"GCash B":500843.30,"BDO":668541,"BPI":1126000,"Store Funds":0}},
   {id:2,date:"Mar 4, 2025",acc:{"GCash A":27174.83,"GCash B":562703.39,"BDO":542485,"BPI":1049000,"Store Funds":0}},
 ];
+const SEED_DAILY = [
+  {id:1,date:"Oct 1, 2026",gross:61084.42,net:54539.66,disc:75.97,pr:0,pending:0,pay:{GCash:20153.81,GC:0,BDO:0,BPI:24298.93,Maya:0,MayaCard:0,MayaQR:0,Cheque:0,VoidDisc:0},grab:{gross:6740,net:5055},pick:{gross:0,net:0}},
+  {id:2,date:"Oct 2, 2026",gross:39650,net:35401.79,disc:0,pr:0,pending:1380,pay:{GCash:6900,GC:0,BDO:0,BPI:8840,Maya:0,MayaCard:4100,MayaQR:0,Cheque:0,VoidDisc:0},grab:{gross:7100,net:5325},pick:{gross:0,net:0}},
+  {id:3,date:"Oct 3, 2026",gross:52880.89,net:47215.08,disc:40.18,pr:0,pending:4920,pay:{GCash:22970.90,GC:0,BDO:0,BPI:7130,Maya:0,MayaCard:2300,MayaQR:0,Cheque:0,VoidDisc:0},grab:{gross:12575,net:9296.25},pick:{gross:0,net:0}},
+  {id:4,date:"Oct 4, 2026",gross:22499.08,net:20088.46,disc:118.21,pr:0,pending:0,pay:{GCash:6890,GC:0,BDO:0,BPI:4620,Maya:0,MayaCard:0,MayaQR:0,Cheque:0,VoidDisc:0},grab:{gross:8290,net:6150},pick:{gross:0,net:0}},
+  {id:5,date:"Oct 5, 2026",gross:68207.95,net:60899.96,disc:20.09,pr:0,pending:0,pay:{GCash:39750,GC:0,BDO:0,BPI:6250,Maya:0,MayaCard:0,MayaQR:0,Cheque:0,VoidDisc:0},grab:{gross:6620,net:4897.50},pick:{gross:0,net:0}},
+  {id:6,date:"Oct 6, 2026",gross:69475.04,net:62031.29,disc:58.26,pr:2490,pending:0,pay:{GCash:20160,GC:0,BDO:1640,BPI:0,Maya:0,MayaCard:14790,MayaQR:0,Cheque:0,VoidDisc:0},grab:{gross:7300,net:5407.50},pick:{gross:0,net:0}},
+];
 
-function load(key, fallback){
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
-  catch{ return fallback; }
-}
-function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch{} }
+function load(key,fallback){ try{ const v=localStorage.getItem(key); return v?JSON.parse(v):fallback; }catch{ return fallback; } }
+function save(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch{} }
 
-const peso = (n,d=0) => n==null ? "—" : "₱"+Number(n).toLocaleString("en-PH",{minimumFractionDigits:d,maximumFractionDigits:d});
-const clr = (v,g,w) => v<=g ? "#22c55e" : v<=w ? "#f59e0b" : "#ef4444";
+const peso = (n,d=0) => n==null?"—":"₱"+Number(n).toLocaleString("en-PH",{minimumFractionDigits:d,maximumFractionDigits:d});
+const clr = (v,g,w) => v<=g?"#22c55e":v<=w?"#f59e0b":"#ef4444";
 const sumOh = oh => OH_KEYS.reduce((s,k)=>s+(Number(oh[k])||0),0);
+const sumPay = pay => PAY_KEYS.reduce((s,k)=>s+(Number(pay[k])||0),0);
 const blankAcc = () => Object.fromEntries(ACCTS.map(k=>[k,""]));
+const blankPay = () => Object.fromEntries(PAY_KEYS.map(k=>[k,""]));
 
 const S = {
   page:  {fontFamily:"'Segoe UI',Arial,sans-serif",background:"#07090f",minHeight:"100vh",color:"#e2e8f0"},
@@ -36,9 +44,10 @@ const S = {
   th:    {padding:"5px 9px",textAlign:"right",color:"#334155",borderBottom:"1px solid #1a2540",fontSize:9,textTransform:"uppercase",letterSpacing:".06em",fontWeight:700,whiteSpace:"nowrap"},
   td:    {padding:"7px 9px",textAlign:"right",fontSize:12,whiteSpace:"nowrap",fontFamily:"'Courier New',monospace"},
   overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,.82)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99,padding:16},
-  modal: {background:"#0f1520",border:"1px solid #1a2540",borderRadius:14,padding:22,width:520,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto"},
+  modal: {background:"#0f1520",border:"1px solid #1a2540",borderRadius:14,padding:22,width:560,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto"},
 };
 const TT = {contentStyle:{background:"#0f1520",border:"1px solid #1a2540",borderRadius:8,fontSize:11},labelStyle:{color:"#64748b"}};
+const btnBase = {border:"none",borderRadius:7,padding:"7px 13px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:".05em",textTransform:"uppercase"};
 
 function KPI({label,value,sub,color}){
   return(
@@ -50,72 +59,70 @@ function KPI({label,value,sub,color}){
   );
 }
 function SLabel({t}){ return <div style={{fontSize:9,fontWeight:700,color:"#1e3a5f",textTransform:"uppercase",letterSpacing:".08em",marginBottom:11}}>{t}</div>; }
-function Field({label,full,children}){
-  return(
-    <div style={{gridColumn:full?"span 2":"span 1"}}>
-      <label style={S.lbl}>{label}</label>
-      {children}
-    </div>
-  );
-}
-function Inp({value,onChange,placeholder}){
-  return <input style={S.input} value={value} onChange={onChange} placeholder={placeholder||""}/>;
-}
+function Field({label,full,children}){ return <div style={{gridColumn:full?"span 2":"span 1"}}><label style={S.lbl}>{label}</label>{children}</div>; }
+function Inp({value,onChange,placeholder}){ return <input style={S.input} value={value} onChange={onChange} placeholder={placeholder||""}/>; }
 
 export default function App(){
-  const [months, setMonthsRaw] = useState(()=>load("big5_months", SEED_MONTHS));
-  const [weekly, setWeeklyRaw] = useState(()=>load("big5_weekly", SEED_WEEKLY));
-  const [tab,    setTab]    = useState("weekly");
-  const [mOpen,  setMOpen]  = useState(false);
-  const [wOpen,  setWOpen]  = useState(false);
-  const [editId, setEditId] = useState(null);
+  const [months,  setMonthsRaw]  = useState(()=>load("big5_months", SEED_MONTHS));
+  const [weekly,  setWeeklyRaw]  = useState(()=>load("big5_weekly", SEED_WEEKLY));
+  const [daily,   setDailyRaw]   = useState(()=>load("big5_daily",  SEED_DAILY));
+  const [tab,     setTab]        = useState("daily");
+  const [mOpen,   setMOpen]      = useState(false);
+  const [wOpen,   setWOpen]      = useState(false);
+  const [dOpen,   setDOpen]      = useState(false);
+  const [editId,  setEditId]     = useState(null);
+  const [editDId, setEditDId]    = useState(null);
 
-  function setMonths(v){ const val = typeof v==="function"?v(months):v; save("big5_months",val); setMonthsRaw(val); }
-  function setWeekly(v){ const val = typeof v==="function"?v(weekly):v; save("big5_weekly",val); setWeeklyRaw(val); }
+  function setMonths(v){ const val=typeof v==="function"?v(months):v; save("big5_months",val); setMonthsRaw(val); }
+  function setWeekly(v){ const val=typeof v==="function"?v(weekly):v; save("big5_weekly",val); setWeeklyRaw(val); }
+  function setDaily(v){  const val=typeof v==="function"?v(daily):v;  save("big5_daily",val);  setDailyRaw(val);  }
 
-  const blankM = () => {
-    const last = months[months.length-1];
-    return {month:"",sales:"",netProfit:"",foodCostPct:"",foodPkg:"",swt:"",
-            begInv:last?String(last.endInv):"",endInv:"",
-            oh:{Rent:"65000",Salaries:"363000",Electricity:"40000","Other Expenses":"0"}};
-  };
-  const [mf, setMf] = useState(blankM());
+  const blankD = () => ({date:"",gross:"",net:"",disc:"",pr:"",pending:"",pay:blankPay(),grab:{gross:"",net:""},pick:{gross:"",net:""}});
+  const [mf, setMf] = useState(()=>{ const last=months[months.length-1]; return {month:"",sales:"",netProfit:"",foodCostPct:"",foodPkg:"",swt:"",begInv:last?String(last.endInv):"",endInv:"",oh:{Rent:"65000",Salaries:"363000",Electricity:"40000","Other Expenses":"0"}}; });
   const [wf, setWf] = useState({date:"",acc:blankAcc()});
+  const [df, setDf] = useState(blankD());
 
+  // Monthly trail
   let run = INIT_CASH;
   const trail = months.map((e,i)=>{
     const ohT = sumOh(e.oh);
-    const prevI = i===0 ? PREV_INV : months[i-1].endInv;
+    const prevI = i===0?PREV_INV:months[i-1].endInv;
     const invD = (Number(e.endInv)||0)-(Number(prevI)||0);
-    const cf   = (Number(e.netProfit)||0) - (Number(e.foodPkg)||0) - ohT;
+    const cf   = (Number(e.netProfit)||0)-(Number(e.foodPkg)||0)-ohT;
     run += cf;
     return {...e,ohT,invD,cf,cashEnd:Math.round(run)};
   });
   const latM = trail[trail.length-1];
 
+  // Weekly
   const wRows = weekly.map(w=>({...w,total:ACCTS.reduce((s,k)=>s+(Number(w.acc[k])||0),0)}));
   const latW  = wRows[wRows.length-1];
   const prevW = wRows[wRows.length-2];
-  const wDelta = latW&&prevW ? latW.total-prevW.total : null;
+  const wDelta = latW&&prevW?latW.total-prevW.total:null;
 
-  function openAddM(){ setEditId(null); setMf(blankM()); setMOpen(true); }
+  // Daily — compute MTD auto
+  const dRows = daily.map((d,i)=>{
+    const mtd = daily.slice(0,i+1).reduce((s,x)=>s+(Number(x.net)||0),0);
+    const mtdGrab = daily.slice(0,i+1).reduce((s,x)=>s+(Number(x.grab?.net)||0),0);
+    const mtdPick = daily.slice(0,i+1).reduce((s,x)=>s+(Number(x.pick?.net)||0),0);
+    const payTotal = sumPay(d.pay);
+    const recon = Math.abs((Number(d.net)||0) - payTotal - (Number(d.grab?.net)||0) - (Number(d.pick?.net)||0) - (Number(d.pending)||0));
+    const reconciled = recon < 1;
+    return {...d,mtd,mtdGrab,mtdPick,payTotal,reconciled,reconDiff:recon};
+  });
+  const latD = dRows[dRows.length-1];
+  const mtdNet = latD?.mtd||0;
+  const todayNet = latD?.net||0;
+
+  // Handlers
+  function openAddM(){ setEditId(null); const last=months[months.length-1]; setMf({month:"",sales:"",netProfit:"",foodCostPct:"",foodPkg:"",swt:"",begInv:last?String(last.endInv):"",endInv:"",oh:{Rent:"65000",Salaries:"363000",Electricity:"40000","Other Expenses":"0"}}); setMOpen(true); }
   function openEditM(e){ setEditId(e.id); setMf({...e,oh:{...e.oh}}); setMOpen(true); }
-
   function saveM(){
-    const entry={
-      month:mf.month, sales:+mf.sales||0, netProfit:+mf.netProfit||0,
-      foodCostPct:+mf.foodCostPct||0, foodPkg:+mf.foodPkg||0,
-      swt:+mf.swt||0, begInv:+mf.begInv||0, endInv:+mf.endInv||0,
-      oh:Object.fromEntries(OH_KEYS.map(k=>[k,+mf.oh[k]||0]))
-    };
-    if(editId){
-      setMonths(months.map(m=>m.id===editId?{...entry,id:editId}:m));
-    } else {
-      setMonths([...months,{...entry,id:Date.now()}]);
-    }
+    const entry={month:mf.month,sales:+mf.sales||0,netProfit:+mf.netProfit||0,foodCostPct:+mf.foodCostPct||0,foodPkg:+mf.foodPkg||0,swt:+mf.swt||0,begInv:+mf.begInv||0,endInv:+mf.endInv||0,oh:Object.fromEntries(OH_KEYS.map(k=>[k,+mf.oh[k]||0]))};
+    if(editId){ setMonths(months.map(m=>m.id===editId?{...entry,id:editId}:m)); }
+    else { setMonths([...months,{...entry,id:Date.now()}]); }
     setMOpen(false);
   }
-
   function deleteM(id){ setMonths(months.filter(m=>m.id!==id)); }
 
   function saveW(){
@@ -123,15 +130,25 @@ export default function App(){
     setWeekly([...weekly,{id:Date.now(),date:wf.date,acc:Object.fromEntries(ACCTS.map(k=>[k,+wf.acc[k]||0]))}]);
     setWf({date:"",acc:blankAcc()}); setWOpen(false);
   }
-
   function deleteW(id){ setWeekly(weekly.filter(w=>w.id!==id)); }
 
-  const TABS=[["weekly","💰 Weekly Cash"],["monthly","📋 Monthly P&L"],["trends","📈 Trends"],["leaks","🔍 Leaks"]];
+  function openAddD(){ setEditDId(null); setDf(blankD()); setDOpen(true); }
+  function openEditD(d){ setEditDId(d.id); setDf({...d,pay:{...d.pay},grab:{...d.grab},pick:{...d.pick}}); setDOpen(true); }
+  function saveD(){
+    if(!df.date) return;
+    const entry={date:df.date,gross:+df.gross||0,net:+df.net||0,disc:+df.disc||0,pr:+df.pr||0,pending:+df.pending||0,pay:Object.fromEntries(PAY_KEYS.map(k=>[k,+df.pay[k]||0])),grab:{gross:+df.grab.gross||0,net:+df.grab.net||0},pick:{gross:+df.pick.gross||0,net:+df.pick.net||0}};
+    if(editDId){ setDaily(daily.map(d=>d.id===editDId?{...entry,id:editDId}:d)); }
+    else { setDaily([...daily,{...entry,id:Date.now()}]); }
+    setDOpen(false);
+  }
+  function deleteD(id){ setDaily(daily.filter(d=>d.id!==id)); }
+
   const cashClr = v => v>=3000000?"#22c55e":v>=2000000?"#f59e0b":"#ef4444";
-  const btnBase = {border:"none",borderRadius:7,padding:"7px 13px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",letterSpacing:".05em",textTransform:"uppercase"};
+  const TABS=[["daily","📊 Daily Sales"],["weekly","💰 Weekly Cash"],["monthly","📋 Monthly P&L"],["trends","📈 Trends"],["leaks","🔍 Leaks"]];
 
   return(
     <div style={S.page}>
+      {/* HEADER */}
       <div style={{borderBottom:"1px solid #1a2540",padding:"11px 18px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <div style={{width:28,height:28,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:"#fff"}}>₱</div>
@@ -142,19 +159,146 @@ export default function App(){
         </div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>
           {TABS.map(([k,l])=>(
-            <button key={k} onClick={()=>setTab(k)} style={{...btnBase,background:tab===k?"#1d4ed8":"transparent",color:tab===k?"#fff":"#475569",padding:"6px 12px"}}>
-              {l}
-            </button>
+            <button key={k} onClick={()=>setTab(k)} style={{...btnBase,background:tab===k?"#1d4ed8":"transparent",color:tab===k?"#fff":"#475569",padding:"6px 12px"}}>{l}</button>
           ))}
         </div>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setWOpen(true)} style={{...btnBase,background:"#1d4ed8",color:"#fff"}}>+ Weekly</button>
-          <button onClick={openAddM}           style={{...btnBase,background:"#6d28d9",color:"#fff"}}>+ Month</button>
+          <button onClick={openAddD}            style={{...btnBase,background:"#0891b2",color:"#fff"}}>+ Daily</button>
+          <button onClick={()=>setWOpen(true)}  style={{...btnBase,background:"#1d4ed8",color:"#fff"}}>+ Weekly</button>
+          <button onClick={openAddM}            style={{...btnBase,background:"#6d28d9",color:"#fff"}}>+ Month</button>
         </div>
       </div>
 
-      <div style={{padding:"16px 18px",maxWidth:1260}}>
+      <div style={{padding:"16px 18px",maxWidth:1400}}>
 
+        {/* DAILY SALES TAB */}
+        {tab==="daily" && (
+          <div style={{display:"flex",flexDirection:"column",gap:13}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+              <KPI label="Latest Day" value={latD?.date||"—"} color="#93c5fd"/>
+              <KPI label="Today Net Sales" value={latD?peso(latD.net,2):"—"} color="#f1f5f9"/>
+              <KPI label="MTD Net Sales" value={peso(mtdNet,2)} sub="Auto-calculated" color="#a78bfa"/>
+              <KPI label="MTD Grab Net" value={peso(latD?.mtdGrab||0,2)} color="#22c55e"/>
+            </div>
+
+            <div style={S.card}>
+              <SLabel t="Daily Net Sales — October 2026"/>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={dRows.map(d=>({d:d.date.replace(", 2026",""),v:d.net}))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1a2540"/>
+                  <XAxis dataKey="d" tick={{fontSize:10,fill:"#334155"}}/>
+                  <YAxis tick={{fontSize:10,fill:"#334155"}} tickFormatter={v=>"₱"+(v/1000).toFixed(0)+"K"}/>
+                  <Tooltip {...TT} formatter={v=>peso(v,2)}/>
+                  <Bar dataKey="v" fill="#3b82f6" radius={[4,4,0,0]} name="Net Sales"/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              <div style={S.card}>
+                <SLabel t="Grab Net Sales — Daily"/>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={dRows.map(d=>({d:d.date.replace(", 2026",""),v:d.grab?.net||0}))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1a2540"/>
+                    <XAxis dataKey="d" tick={{fontSize:10,fill:"#334155"}}/>
+                    <YAxis tick={{fontSize:10,fill:"#334155"}} tickFormatter={v=>"₱"+(v/1000).toFixed(0)+"K"}/>
+                    <Tooltip {...TT} formatter={v=>peso(v,2)}/>
+                    <Bar dataKey="v" fill="#22c55e" radius={[4,4,0,0]} name="Grab Net"/>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={S.card}>
+                <SLabel t="MTD Net Sales Progression"/>
+                <ResponsiveContainer width="100%" height={160}>
+                  <AreaChart data={dRows.map(d=>({d:d.date.replace(", 2026",""),v:d.mtd}))}>
+                    <defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#a78bfa" stopOpacity={.2}/><stop offset="95%" stopColor="#a78bfa" stopOpacity={0}/></linearGradient></defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1a2540"/>
+                    <XAxis dataKey="d" tick={{fontSize:10,fill:"#334155"}}/>
+                    <YAxis tick={{fontSize:10,fill:"#334155"}} tickFormatter={v=>"₱"+(v/1000).toFixed(0)+"K"}/>
+                    <Tooltip {...TT} formatter={v=>peso(v,2)}/>
+                    <Area type="monotone" dataKey="v" stroke="#a78bfa" strokeWidth={2} fill="url(#mg)" name="MTD Net"/>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div style={S.card}>
+              <SLabel t="Daily Sales Log — Big5 Makati · October 2026"/>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr>
+                      <th style={{...S.th,textAlign:"left"}}>Date</th>
+                      <th style={S.th}>Gross</th>
+                      <th style={S.th}>Net Sales</th>
+                      <th style={S.th}>Disc</th>
+                      <th style={S.th}>PR</th>
+                      <th style={S.th}>Pending</th>
+                      <th style={S.th}>GCash</th>
+                      <th style={S.th}>BDO</th>
+                      <th style={S.th}>BPI</th>
+                      <th style={S.th}>Maya</th>
+                      <th style={S.th}>Maya Card</th>
+                      <th style={S.th}>Pay Total</th>
+                      <th style={S.th}>Grab Net</th>
+                      <th style={S.th}>Pick Net</th>
+                      <th style={S.th}>MTD Net</th>
+                      <th style={S.th}>Recon</th>
+                      <th style={S.th}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dRows.map(d=>(
+                      <tr key={d.id} style={{borderBottom:"1px solid #07090f"}}>
+                        <td style={{...S.td,textAlign:"left",color:"#93c5fd",fontWeight:700,fontFamily:"inherit"}}>{d.date}</td>
+                        <td style={S.td}>{peso(d.gross,2)}</td>
+                        <td style={{...S.td,color:"#f1f5f9",fontWeight:700}}>{peso(d.net,2)}</td>
+                        <td style={{...S.td,color:d.disc>0?"#f59e0b":"#334155"}}>{d.disc>0?peso(d.disc,2):"—"}</td>
+                        <td style={{...S.td,color:d.pr>0?"#f472b6":"#334155"}}>{d.pr>0?peso(d.pr,2):"—"}</td>
+                        <td style={{...S.td,color:d.pending>0?"#ef4444":"#334155"}}>{d.pending>0?peso(d.pending,2):"—"}</td>
+                        <td style={{...S.td,color:d.pay.GCash>0?"#3b82f6":"#334155"}}>{d.pay.GCash>0?peso(d.pay.GCash,2):"—"}</td>
+                        <td style={{...S.td,color:d.pay.BDO>0?"#06b6d4":"#334155"}}>{d.pay.BDO>0?peso(d.pay.BDO,2):"—"}</td>
+                        <td style={{...S.td,color:d.pay.BPI>0?"#f59e0b":"#334155"}}>{d.pay.BPI>0?peso(d.pay.BPI,2):"—"}</td>
+                        <td style={{...S.td,color:d.pay.Maya>0?"#8b5cf6":"#334155"}}>{d.pay.Maya>0?peso(d.pay.Maya,2):"—"}</td>
+                        <td style={{...S.td,color:d.pay.MayaCard>0?"#8b5cf6":"#334155"}}>{d.pay.MayaCard>0?peso(d.pay.MayaCard,2):"—"}</td>
+                        <td style={S.td}>{peso(d.payTotal,2)}</td>
+                        <td style={{...S.td,color:"#22c55e"}}>{d.grab?.net>0?peso(d.grab.net,2):"—"}</td>
+                        <td style={{...S.td,color:"#22c55e"}}>{d.pick?.net>0?peso(d.pick.net,2):"—"}</td>
+                        <td style={{...S.td,color:"#a78bfa",fontWeight:700}}>{peso(d.mtd,2)}</td>
+                        <td style={{...S.td,color:d.reconciled?"#22c55e":"#ef4444",fontWeight:700}}>{d.reconciled?"✓":"!"}</td>
+                        <td style={{padding:"5px 8px",whiteSpace:"nowrap"}}>
+                          <button onClick={()=>openEditD(d)} style={{...btnBase,background:"#1a2540",color:"#94a3b8",padding:"3px 9px",fontSize:9,marginRight:4}}>Edit</button>
+                          <button onClick={()=>{if(window.confirm("Delete this entry?")) deleteD(d.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Del</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{borderTop:"2px solid #1a2540"}}>
+                      <td style={{...S.td,textAlign:"left",color:"#334155",fontFamily:"inherit",fontWeight:700}}>TOTAL</td>
+                      <td style={{...S.td,color:"#f1f5f9",fontWeight:700}}>{peso(dRows.reduce((s,d)=>s+d.gross,0),2)}</td>
+                      <td style={{...S.td,color:"#f1f5f9",fontWeight:700}}>{peso(dRows.reduce((s,d)=>s+d.net,0),2)}</td>
+                      <td style={{...S.td,color:"#f59e0b"}}>{peso(dRows.reduce((s,d)=>s+d.disc,0),2)}</td>
+                      <td style={{...S.td,color:"#f472b6"}}>{peso(dRows.reduce((s,d)=>s+d.pr,0),2)}</td>
+                      <td style={{...S.td,color:"#ef4444"}}>{peso(dRows.reduce((s,d)=>s+d.pending,0),2)}</td>
+                      <td style={{...S.td,color:"#3b82f6"}}>{peso(dRows.reduce((s,d)=>s+d.pay.GCash,0),2)}</td>
+                      <td style={{...S.td,color:"#06b6d4"}}>{peso(dRows.reduce((s,d)=>s+d.pay.BDO,0),2)}</td>
+                      <td style={{...S.td,color:"#f59e0b"}}>{peso(dRows.reduce((s,d)=>s+d.pay.BPI,0),2)}</td>
+                      <td style={{...S.td,color:"#8b5cf6"}}>{peso(dRows.reduce((s,d)=>s+d.pay.Maya,0),2)}</td>
+                      <td style={{...S.td,color:"#8b5cf6"}}>{peso(dRows.reduce((s,d)=>s+d.pay.MayaCard,0),2)}</td>
+                      <td style={S.td}>{peso(dRows.reduce((s,d)=>s+d.payTotal,0),2)}</td>
+                      <td style={{...S.td,color:"#22c55e"}}>{peso(dRows.reduce((s,d)=>s+(d.grab?.net||0),0),2)}</td>
+                      <td style={{...S.td,color:"#22c55e"}}>{peso(dRows.reduce((s,d)=>s+(d.pick?.net||0),0),2)}</td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WEEKLY TAB */}
         {tab==="weekly" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -212,7 +356,7 @@ export default function App(){
                           <td style={{...S.td,color:"#f1f5f9",fontWeight:700}}>{peso(w.total,2)}</td>
                           <td style={{...S.td,color:d==null?"#1a2540":d>=0?"#22c55e":"#ef4444",fontWeight:700}}>{d==null?"—":(d>=0?"+":"")+peso(d,2)}</td>
                           <td style={{padding:"5px 8px"}}>
-                            <button onClick={()=>{if(window.confirm("Delete this entry?")) deleteW(w.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Delete</button>
+                            <button onClick={()=>{if(window.confirm("Delete?")) deleteW(w.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Del</button>
                           </td>
                         </tr>
                       );
@@ -224,6 +368,7 @@ export default function App(){
           </div>
         )}
 
+        {/* MONTHLY TAB */}
         {tab==="monthly" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -244,7 +389,7 @@ export default function App(){
                   </tr></thead>
                   <tbody>
                     {trail.map(e=>{
-                      const swtP = e.sales?(e.swt/e.sales*100):0;
+                      const swtP=e.sales?(e.swt/e.sales*100):0;
                       return(
                         <tr key={e.id} style={{borderBottom:"1px solid #07090f"}}>
                           <td style={{...S.td,textAlign:"left",color:"#93c5fd",fontWeight:700,fontFamily:"inherit"}}>{e.month}</td>
@@ -259,7 +404,7 @@ export default function App(){
                           <td style={{...S.td,color:e.cf>0?"#22c55e":"#ef4444",fontWeight:700}}>{peso(e.cf)}</td>
                           <td style={{padding:"5px 8px",whiteSpace:"nowrap"}}>
                             <button onClick={()=>openEditM(e)} style={{...btnBase,background:"#1a2540",color:"#94a3b8",padding:"3px 9px",fontSize:9,marginRight:4}}>Edit</button>
-                            <button onClick={()=>{if(window.confirm("Delete this month?")) deleteM(e.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Del</button>
+                            <button onClick={()=>{if(window.confirm("Delete?")) deleteM(e.id);}} style={{...btnBase,background:"rgba(239,68,68,0.1)",color:"#ef4444",padding:"3px 9px",fontSize:9}}>Del</button>
                           </td>
                         </tr>
                       );
@@ -313,6 +458,7 @@ export default function App(){
           </div>
         )}
 
+        {/* TRENDS TAB */}
         {tab==="trends" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
@@ -363,14 +509,15 @@ export default function App(){
           </div>
         )}
 
+        {/* LEAKS TAB */}
         {tab==="leaks" && (
           <div style={{display:"flex",flexDirection:"column",gap:13}}>
             {trail.map((e,i)=>{
-              const prevI = i===0?PREV_INV:trail[i-1].endInv;
-              const iLeak = Math.max(0,(Number(e.endInv)||0)-(Number(prevI)||0));
-              const sLeak = Math.max(0,(Number(e.swt)||0)-(Number(e.sales)||0)*0.03);
-              const fLeak = Math.max(0,((Number(e.foodCostPct)||0)/100-0.48)*(Number(e.sales)||0));
-              const tot   = iLeak+sLeak+fLeak;
+              const prevI=i===0?PREV_INV:trail[i-1].endInv;
+              const iLeak=Math.max(0,(Number(e.endInv)||0)-(Number(prevI)||0));
+              const sLeak=Math.max(0,(Number(e.swt)||0)-(Number(e.sales)||0)*0.03);
+              const fLeak=Math.max(0,((Number(e.foodCostPct)||0)/100-0.48)*(Number(e.sales)||0));
+              const tot=iLeak+sLeak+fLeak;
               return(
                 <div key={e.id} style={S.card}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -385,13 +532,7 @@ export default function App(){
                       </div>
                     ))}
                   </div>
-                  {tot>0&&(
-                    <div style={{height:5,borderRadius:3,display:"flex",gap:1,overflow:"hidden"}}>
-                      {[{v:iLeak,c:"#f59e0b"},{v:sLeak,c:"#ef4444"},{v:fLeak,c:"#f472b6"}].map((x,j)=>(
-                        <div key={j} style={{flex:x.v,background:x.c,minWidth:x.v>0?2:0}}/>
-                      ))}
-                    </div>
-                  )}
+                  {tot>0&&<div style={{height:5,borderRadius:3,display:"flex",gap:1,overflow:"hidden"}}>{[{v:iLeak,c:"#f59e0b"},{v:sLeak,c:"#ef4444"},{v:fLeak,c:"#f472b6"}].map((x,j)=><div key={j} style={{flex:x.v,background:x.c,minWidth:x.v>0?2:0}}/>)}</div>}
                 </div>
               );
             })}
@@ -415,7 +556,46 @@ export default function App(){
         )}
       </div>
 
-      {/* ══ MODAL: Month ══ */}
+      {/* MODAL: Daily */}
+      {dOpen&&(
+        <div style={S.overlay} onClick={()=>setDOpen(false)}>
+          <div style={S.modal} onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:3}}>{editDId?"Edit Daily Entry":"Log Daily Sales"}</div>
+            <div style={{fontSize:10,color:"#334155",marginBottom:14}}>Big5 Makati · All amounts in Philippine Peso</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Field label="Date" full><Inp value={df.date} onChange={e=>setDf({...df,date:e.target.value})} placeholder="Oct 7, 2026"/></Field>
+              <Field label="Gross Sales"><Inp value={df.gross} onChange={e=>setDf({...df,gross:e.target.value})} placeholder="0"/></Field>
+              <Field label="Net Sales"><Inp value={df.net} onChange={e=>setDf({...df,net:e.target.value})} placeholder="0"/></Field>
+              <Field label="Discounts"><Inp value={df.disc} onChange={e=>setDf({...df,disc:e.target.value})} placeholder="0"/></Field>
+              <Field label="PR (Freebies)"><Inp value={df.pr} onChange={e=>setDf({...df,pr:e.target.value})} placeholder="0"/></Field>
+              <Field label="Pending" full><Inp value={df.pending} onChange={e=>setDf({...df,pending:e.target.value})} placeholder="0"/></Field>
+            </div>
+            <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #1a2540"}}>
+              <div style={{fontSize:9,fontWeight:700,color:"#1e3a5f",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Payment Breakdown</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[["GCash","GCash"],["GC","Gift Certificate"],["BDO","BDO"],["BPI","BPI"],["Maya","Maya"],["MayaCard","Maya Card"],["MayaQR","Maya QR PH"],["Cheque","Cheque"],["VoidDisc","Void Discrepancy"]].map(([k,l])=>(
+                  <Field key={k} label={l}><Inp value={df.pay[k]} onChange={e=>setDf({...df,pay:{...df.pay,[k]:e.target.value}})} placeholder="0"/></Field>
+                ))}
+              </div>
+            </div>
+            <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #1a2540"}}>
+              <div style={{fontSize:9,fontWeight:700,color:"#1e3a5f",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Delivery Channels</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Field label="Grab Gross"><Inp value={df.grab.gross} onChange={e=>setDf({...df,grab:{...df.grab,gross:e.target.value}})} placeholder="0"/></Field>
+                <Field label="Grab Net"><Inp value={df.grab.net} onChange={e=>setDf({...df,grab:{...df.grab,net:e.target.value}})} placeholder="0"/></Field>
+                <Field label="Pickaroo Gross"><Inp value={df.pick.gross} onChange={e=>setDf({...df,pick:{...df.pick,gross:e.target.value}})} placeholder="0"/></Field>
+                <Field label="Pickaroo Net"><Inp value={df.pick.net} onChange={e=>setDf({...df,pick:{...df.pick,net:e.target.value}})} placeholder="0"/></Field>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={saveD} style={{...btnBase,background:"#0891b2",color:"#fff",flex:1}}>{editDId?"Save Changes":"Add Entry"}</button>
+              <button onClick={()=>setDOpen(false)} style={{...btnBase,background:"transparent",color:"#475569",border:"1px solid #1a2540"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Month */}
       {mOpen&&(
         <div style={S.overlay} onClick={()=>setMOpen(false)}>
           <div style={S.modal} onClick={e=>e.stopPropagation()}>
@@ -427,18 +607,14 @@ export default function App(){
               <Field label="Net Profit — disc-net (₱)"><Inp value={mf.netProfit} onChange={e=>setMf({...mf,netProfit:e.target.value})} placeholder="1479000"/></Field>
               <Field label="Beg Inventory (₱)"><Inp value={mf.begInv} onChange={e=>setMf({...mf,begInv:e.target.value})} placeholder="732000"/></Field>
               <Field label="End Inventory (₱)"><Inp value={mf.endInv} onChange={e=>setMf({...mf,endInv:e.target.value})} placeholder="710000"/></Field>
-              <Field label="SWT — Spoilage / Waste / Trimmings (₱)" full><Inp value={mf.swt} onChange={e=>setMf({...mf,swt:e.target.value})} placeholder="120000"/></Field>
+              <Field label="SWT (₱)" full><Inp value={mf.swt} onChange={e=>setMf({...mf,swt:e.target.value})} placeholder="120000"/></Field>
               <Field label="Food & Packaging (₱)"><Inp value={mf.foodPkg} onChange={e=>setMf({...mf,foodPkg:e.target.value})} placeholder="828000"/></Field>
               <Field label="Food Cost %"><Inp value={mf.foodCostPct} onChange={e=>setMf({...mf,foodCostPct:e.target.value})} placeholder="50"/></Field>
             </div>
             <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid #1a2540"}}>
               <div style={{fontSize:9,fontWeight:700,color:"#1e3a5f",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Overhead</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {OH_KEYS.map(k=>(
-                  <Field key={k} label={k}>
-                    <Inp value={mf.oh[k]} onChange={e=>setMf({...mf,oh:{...mf.oh,[k]:e.target.value}})} placeholder="0"/>
-                  </Field>
-                ))}
+                {OH_KEYS.map(k=><Field key={k} label={k}><Inp value={mf.oh[k]} onChange={e=>setMf({...mf,oh:{...mf.oh,[k]:e.target.value}})} placeholder="0"/></Field>)}
               </div>
               <div style={{marginTop:8,fontSize:11,color:"#f59e0b",fontFamily:"'Courier New',monospace",textAlign:"right"}}>
                 Total Overhead: {peso(OH_KEYS.reduce((s,k)=>s+(Number(mf.oh[k])||0),0))}
@@ -452,13 +628,13 @@ export default function App(){
         </div>
       )}
 
-      {/* ══ MODAL: Weekly ══ */}
+      {/* MODAL: Weekly */}
       {wOpen&&(
         <div style={S.overlay} onClick={()=>setWOpen(false)}>
           <div style={S.modal} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:3}}>Log Weekly Cash</div>
             <div style={{fontSize:10,color:"#334155",marginBottom:16}}>Enter account balances as of the date</div>
-            <Field label="Date"><Inp value={wf.date} onChange={e=>setWf({...wf,date:e.target.value})} placeholder="Mar 9, 2026"/></Field>
+            <Field label="Date"><Inp value={wf.date} onChange={e=>setWf({...wf,date:e.target.value})} placeholder="Oct 7, 2026"/></Field>
             <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:9}}>
               {ACCTS.map(k=>(
                 <div key={k} style={{display:"grid",gridTemplateColumns:"140px 1fr",alignItems:"center",gap:10}}>
